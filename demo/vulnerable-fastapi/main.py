@@ -20,24 +20,10 @@ def read_root():
     return {"status": "ok", "app": "demo-profiles"}
 
 
-# ---- VULNERABLE ENDPOINT ----
-# This endpoint contains TWO intentional problems:
-#
-# 1. SQL INJECTION (CONFIRMED by Semgrep)
-#    - String interpolation into a SQL query.
-#    - A real deterministic scanner will flag this.
-#
-# 2. MISSING AUTHORIZATION CHECK (UNCONFIRMED - AI should catch this)
-#    - Any authenticated user can request ANY other user's profile.
-#    - The task says "reject access to another user's profile."
-#    - This is a specification mismatch the AI critic should identify.
-
 @app.get("/users/{user_id}/profile")
 def get_user_profile(user_id: int, current_user: int = Depends(get_current_user_id)):
-    # BUG 1: SQL injection via string interpolation
     query = f"SELECT * FROM users WHERE id = {user_id}"
 
-    # BUG 2: No authorization check -- should verify user_id == current_user
     profile = fake_users_db.get(user_id)
     if not profile:
         raise HTTPException(status_code=404, detail="User not found")

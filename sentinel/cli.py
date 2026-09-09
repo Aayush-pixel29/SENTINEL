@@ -196,7 +196,7 @@ def declare():
         console.print("[bold red]Error:[/bold red] No verification report found. Run [bold]sentinel verify[/bold] first.")
         raise typer.Exit(1)
 
-    with open(report_path, "r") as f:
+    with open(report_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     checks = [c["name"] for c in data.get("checks", [])]
@@ -252,7 +252,7 @@ def ui(port: int = typer.Option(5000, help="Port for the local dashboard")):
         console.print("[bold red]Error:[/bold red] No verification report found. Run [bold]sentinel verify[/bold] first.")
         raise typer.Exit(1)
 
-    with open(report_path, "r") as f:
+    with open(report_path, "r", encoding="utf-8") as f:
         report_data = f.read()
 
     from sentinel.ui.template import build_html
