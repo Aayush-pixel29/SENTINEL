@@ -1,23 +1,19 @@
 # Sentinel
 
+**Sentinel is an open-source, local-first verification layer for AI-generated code.**
+
 > **AI writes the code. Sentinel verifies what can actually be verified.**
-
-Evidence-driven verification for AI-generated code.
-
-**Challenge:** Developer Productivity  
-**Category:** Understand + Test + Review + Ship
 
 ---
 
-## The Problem
+## 1. What Sentinel Is
 
-AI coding agents (Claude Code, Gemini, Cursor, Copilot, Codex) can generate a code change in seconds.
+Sentinel is a verification layer that sits between your AI coding agent and your Git repository. It orchestrates a suite of deterministic engineering and security checks alongside an independent AI critic to produce an auditable, evidence-driven verification report.
 
-But *verifying* that change is still expensive. When an AI says "Done. Tests are passing.", the developer has to ask:
+## 2. Why AI-generated code needs verification
 
+AI coding agents (Claude Code, Gemini, Cursor, Copilot, Codex) can generate code changes in seconds. But *verifying* that change is still expensive. When an AI says "Done. Tests are passing.", the developer has to ask:
 - What actually changed?
-- Did the tests pass?
-- Did it break typing / linting?
 - Did it introduce a security problem?
 - Did it expose a secret?
 - Did it change dependencies dangerously?
@@ -25,189 +21,129 @@ But *verifying* that change is still expensive. When an AI says "Done. Tests are
 
 **The cost of generating code is falling faster than the cost of trusting it.**
 
-## The Solution
+## 3. How it works
 
-Sentinel answers all of those questions in **one verification step**.
-
-```
-AI coding agent
-      |
-   code change
-      |
-   SENTINEL
-      |-- Git diff analysis
-      |-- Tests (pytest)
-      |-- Lint (ruff)
-      |-- Type checking (mypy)
-      |-- Security analysis (Semgrep)
-      |-- Secret detection (Gitleaks)
-      |-- Dependency audit (pip-audit)
-      |-- Independent AI reasoning (Gemini)
-      |
-   Evidence synthesis
-      |
-   BLOCKED / INCOMPLETE / REVIEW / VERIFIED
-      |
-   Human decides
+```text
+AI writes
+    ↓
+Sentinel verifies
+    ↓
+Human decides
 ```
 
-## Why Sentinel Is Different
+Sentinel operates directly on your local Git repository. It reads the Git diff, runs deterministic checks, sends the diff to an AI critic, and surfaces the evidence natively in your IDE (VS Code).
 
-| AI opinion | Sentinel evidence |
-|---|---|
-| "This looks secure." | Semgrep detected SQL injection at `app/api.py:28` |
-| Not proof | **Deterministic fact** |
+## 4. Installation
 
-Sentinel separates:
-
-- **CONFIRMED** -- a deterministic tool produced a finding (fact)
-- **UNCONFIRMED** -- AI raised a concern requiring human verification (reasoning)
-
-We never say "AI found a vulnerability." We say "AI raised a concern."
-
-## Installation
-
+**1. Install the Verification Engine (CLI)**
 ```bash
 git clone https://github.com/Aayush-pixel29/SENTINEL.git
 cd SENTINEL
 pip install -e .
 ```
 
-Set your Gemini API key:
+**2. Configure AI (First time only)**
 ```bash
 export GEMINI_API_KEY="your_key_here"     # macOS/Linux
 $env:GEMINI_API_KEY="your_key_here"       # PowerShell
 ```
 
-## Configuration
+**3. Install the VS Code Extension**
+- Open the `vscode-extension` directory in VS Code.
+- Press `F5` to launch the Extension Development Host.
 
-Create `.sentinel/config.yml` in your project root:
+## 5. VS Code Workflow (Primary Experience)
 
-```yaml
-project:
-  name: my-app
-  language: python
-  framework: fastapi
+Sentinel is designed to live where you work. 
+1. Open your project in VS Code.
+2. Let your AI agent (Cursor, Copilot, etc.) make changes.
+3. Click the 🛡 **Sentinel** icon in the Activity Bar.
+4. Click **Verify Changes**.
+5. Review the evidence directly in the sidebar, and click findings to jump to the exact file and line in the editor.
 
-task:
-  description: "Add a user profile lookup endpoint."
+## 6. CLI Workflow (Headless Engine)
 
-checks:
-  test:
-    enabled: true
-    command: "pytest"
-  lint:
-    enabled: true
-    command: "ruff check ."
-  typecheck:
-    enabled: true
-    command: "mypy ."
-  semgrep:
-    enabled: true
-  secrets:
-    enabled: true
-  dependencies:
-    enabled: true
+The VS Code extension is powered by the Sentinel CLI engine. You can also run it directly:
 
-ai:
-  enabled: true
-```
-
-## Usage
-
-### Verify your changes
 ```bash
+cd your-project
 sentinel verify
 ```
-
-### Open the local dashboard
+This generates `.sentinel/report.json`. You can then view the results in the terminal, or launch the standalone browser UI:
 ```bash
 sentinel ui
 ```
 
-### Generate an AI use declaration
-```bash
-sentinel declare
+## 7. Verification Architecture
+
+```text
+                 SENTINEL
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+   VS CODE EXTENSION        CLI / ENGINE
+        │                       │
+        └───────────┬───────────┘
+                    │
+                Git Diff
+                    │
+       ┌────────────┼────────────┐
+       ↓            ↓            ↓
+    Testing      Security      AI Critic
+    (pytest)     (semgrep,     (Gemini)
+                 gitleaks)       │
+       │            │            │
+       └────────────┼────────────┘
+                    ↓
+             Evidence Engine
+                    ↓
+          .sentinel/report.json
 ```
 
-## Example Flow
+## 8. CONFIRMED vs UNCONFIRMED
 
-```
-$ sentinel verify
+Sentinel strictly separates deterministic tool output from AI reasoning:
 
-----------------------------------------------
-              S E N T I N E L
-     Evidence-driven code verification
-----------------------------------------------
+| AI Opinion | Sentinel Evidence |
+|---|---|
+| "This looks secure." | Semgrep detected SQL injection at `app.py:28` |
+| Not proof | **Deterministic fact** |
 
-  Repository   SENTINEL
-  Branch       main
-  Commit       a84c2d1
+- **CONFIRMED**: A deterministic tool (e.g., Semgrep, pytest) produced a finding.
+- **UNCONFIRMED (AI)**: The AI Critic raised a concern requiring human verification. We never say "AI found a vulnerability." We say "AI raised a concern."
 
-Analyzing Git changes ...
+## 9. Verdicts
 
-CHANGE  (staged)
-  Files changed     3
-  Lines added       +87
-  Lines removed     -14
+Sentinel assigns one of four verdicts to your changes:
+- **VERIFIED**: Required checks passed. No significant confirmed findings remain. Human review is still recommended.
+- **REVIEW**: No confirmed blocker, but human attention is required (e.g., an unconfirmed AI concern).
+- **BLOCKED**: Sentinel found confirmed blocking evidence or failing required checks.
+- **INCOMPLETE**: Sentinel could not complete all required verification checks.
 
-DETERMINISTIC CHECKS
-
-  pytest           PASS
-  ruff             PASS
-  mypy             PASS
-  semgrep          FAIL  1 finding(s)
-  gitleaks         PASS
-  pip-audit        PASS
-
-AI REVIEW
-
-  1 unconfirmed concern(s)
-
-----------------------------------------------
-
-VERDICT
-
-  BLOCKED
-
-CONFIRMED
-
-  SQL Injection  demo/vulnerable-fastapi/main.py:28
-     Detected by semgrep
-
-UNCONFIRMED (AI)
-
-  Authorization boundary may be incomplete
-     demo/vulnerable-fastapi/main.py:28
-```
-
-## Security & Responsible AI
+## 10. Responsible AI
 
 - Sentinel does **not** execute AI-generated exploit payloads.
 - Sentinel does **not** claim AI-generated software is safe because an AI said so.
-- Deterministic findings are reported separately from AI suspicions.
-- AI findings are labelled **UNCONFIRMED** and require human verification.
 - A clean report does **not** guarantee completely secure software.
+- AI findings are clearly labelled **UNCONFIRMED**.
 - No API keys are stored in reports, logs, or terminal output.
 
-## Limitations
+## 11. Demo
 
-- AI findings can be wrong (they are reasoning, not proof)
-- Scanners have coverage limitations
-- Only configured checks are executed
-- AI provider availability affects AI review
-- No guarantee of absolute security
+To test Sentinel, use the provided demo project:
+1. Open the repository in VS Code.
+2. Launch the extension (`F5`).
+3. Open the `demo/vulnerable-fastapi` folder in the Extension Host.
+4. Run `Sentinel: Verify Changes` via the sidebar.
+5. Observe the **BLOCKED** verdict and the **CONFIRMED** SQL injection finding.
+6. Fix the vulnerability and verify again to achieve **VERIFIED**.
 
-## Roadmap
+## 12. Roadmap
 
-- GitHub Action integration
-- VS Code extension
-- JavaScript/TypeScript, Go, Rust, Java support
-- Multiple AI providers
-- Verification history
-- CI policy enforcement
-- Agent/MCP security analysis
+- **Phase 1**: Local Sentinel engine + CLI + VS Code Extension (✅ NOW)
+- **Phase 2**: GitHub Actions / Pull Request verification
+- **Phase 3**: GitHub PR comments/checks
+- **Phase 4**: JetBrains integration
 
-## License
-
-MIT
+---
+**License**: MIT

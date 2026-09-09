@@ -1,0 +1,89 @@
+{
+  "name": "sentinel-code-verification",
+  "displayName": "Sentinel — AI Code Verification",
+  "description": "Evidence-driven verification for AI-generated code, directly inside VS Code.",
+  "version": "0.1.0",
+  "icon": "media/sentinel.png",
+  "publisher": "sentinel-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aayush-pixel29/SENTINEL"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "code review",
+    "security",
+    "verification",
+    "semgrep",
+    "developer productivity"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:.git"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sentinel.verify",
+        "title": "Sentinel: Verify Changes",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "sentinel.openReport",
+        "title": "Sentinel: Open Verification Report",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "sentinel.explain",
+        "title": "Sentinel: Explain Verdict",
+        "icon": "$(question)"
+      },
+      {
+        "command": "sentinel.setup",
+        "title": "Sentinel: Setup Verification Engine"
+      }
+    ],
+    "configuration": {
+      "title": "Sentinel",
+      "properties": {
+        "sentinel.cliPath": {
+          "type": "string",
+          "default": "sentinel",
+          "description": "Path or command used to run the Sentinel CLI."
+        },
+        "sentinel.autoVerifyOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically verify Git changes after saving a file. Disabled by default because full verification may take time."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sentinel",
+          "title": "Sentinel",
+          "icon": "media/sentinel.png"
+        }
+      ]
+    },
+    "views": {
+      "sentinel": [
+        {
+          "id": "sentinel.verificationView",
+          "name": "Verification",
+          "type": "webview"
+        }
+      ]
+    }
+  }
+}
