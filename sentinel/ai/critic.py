@@ -43,7 +43,7 @@ def run_ai_review(context: str) -> AIReviewResult:
         prompt = f"{SYSTEM_PROMPT}\n\n---\n\n{context}"
 
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config={
                 "response_mime_type": "application/json",
@@ -59,7 +59,7 @@ def run_ai_review(context: str) -> AIReviewResult:
                 data = AIReviewResponse.model_validate(raw)
             except Exception:
                 return AIReviewResult(
-                    summary="AI model returned unparseable output.",
+                    summary="Gemini returned unparseable output.",
                     findings=[],
                     status=CheckStatus.ERROR,
                     provider="gemini",
@@ -88,8 +88,23 @@ def run_ai_review(context: str) -> AIReviewResult:
         )
 
     except Exception as e:
+        # Classify errors cleanly — never dump raw API internals
+        err_str = str(e)
+        if "401" in err_str or "403" in err_str or "API_KEY" in err_str.upper():
+            msg = "Gemini authentication failed. Check your GEMINI_API_KEY."
+        elif "429" in err_str or "RATE" in err_str.upper():
+            msg = "Gemini rate limited. Deterministic verification continued."
+        elif "503" in err_str or "UNAVAILABLE" in err_str.upper():
+            msg = "Gemini temporarily unavailable. Deterministic verification continued."
+        elif "404" in err_str or "NOT_FOUND" in err_str.upper():
+            msg = "Gemini model not found. Check model availability."
+        elif "TIMEOUT" in err_str.upper() or "timed out" in err_str.lower():
+            msg = "Gemini request timed out. Deterministic verification continued."
+        else:
+            msg = "Gemini review could not complete. Deterministic verification continued."
+
         return AIReviewResult(
-            summary=f"AI review failed: {str(e)}",
+            summary=msg,
             findings=[],
             status=CheckStatus.ERROR,
             provider="gemini",

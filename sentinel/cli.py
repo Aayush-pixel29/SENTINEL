@@ -174,6 +174,7 @@ def verify(config: str = typer.Option(".sentinel/config.yml", help="Path to conf
         unconfirmed_findings=unconfirmed,
         ai_review=ai_result.model_dump() if ai_result else {"summary": "Disabled"},
         ai_provider=ai_result.provider if ai_result else "",
+        metadata={"diff_text": diff.diff_text}
     )
 
     os.makedirs(".sentinel", exist_ok=True)
@@ -279,6 +280,63 @@ def ui(port: int = typer.Option(5000, help="Port for the local dashboard")):
     except KeyboardInterrupt:
         console.print("\nDashboard stopped.")
         server.server_close()
+
+
+@app.command()
+def explain():
+    """Explain the verification verdict in plain english."""
+    report_path = Path(".sentinel/report.json")
+    if not report_path.exists():
+        console.print("[bold red]Error:[/bold red] No verification report found. Run [bold]sentinel verify[/bold] first.")
+        raise typer.Exit(1)
+
+    with open(report_path, "r") as f:
+        data = json.load(f)
+
+    verdict = data.get("verdict", "UNKNOWN")
+    confirmed = data.get("confirmed_findings", [])
+    unconfirmed = data.get("unconfirmed_findings", [])
+    checks = data.get("checks", [])
+
+    if verdict == "VERIFIED":
+        console.print("\n[bold green]WHY VERIFIED[/bold green]")
+        console.print("1. All required deterministic checks passed.")
+        console.print("2. Gemini raised no significant concerns.")
+        console.print("\n[bold]Recommended action:[/bold] Human review is still recommended before merging.")
+        console.print()
+        return
+
+    title = "WHY BLOCKED" if verdict == "BLOCKED" else f"WHY {verdict}"
+    color = "red" if verdict == "BLOCKED" else "yellow"
+    
+    console.print(f"\n[bold {color}]{title}[/bold {color}]")
+    idx = 1
+    
+    for f in confirmed:
+        loc = f.get("file", "unknown")
+        console.print(f"{idx}. {f.get('source')} confirmed a {f.get('severity')} severity {f.get('title')} in {loc}.")
+        idx += 1
+        
+    for f in unconfirmed:
+        console.print(f"{idx}. Gemini identified a possible {f.get('title').lower()}. This is [yellow]UNCONFIRMED[/yellow].")
+        idx += 1
+        
+    failed_checks = [c["name"] for c in checks if c["status"] == "FAILED"]
+    passed_checks = [c["name"] for c in checks if c["status"] == "PASSED"]
+    
+    if failed_checks:
+        console.print(f"{idx}. The following checks failed: {', '.join(failed_checks)}.")
+        idx += 1
+    elif passed_checks:
+        console.print(f"{idx}. {len(passed_checks)} tests passed, but passing tests do not prove correctness.")
+        idx += 1
+
+    console.print("\n[bold]Recommended action:[/bold]", end=" ")
+    if confirmed or failed_checks:
+        console.print(f"[bold {color}]Fix the confirmed issues and failing checks, then re-run `sentinel verify`.[/bold {color}]")
+    else:
+        console.print(f"[bold {color}]Manually verify the AI concerns and decide whether to proceed.[/bold {color}]")
+    console.print()
 
 
 def main():
