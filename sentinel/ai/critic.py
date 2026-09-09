@@ -1,108 +1,96 @@
 import os
 import json
-from typing import Dict, Any
-from anthropic import Anthropic, APIError
+from typing import List
+from pydantic import BaseModel
 
 from sentinel.ai.prompts import SYSTEM_PROMPT
 from sentinel.models import AIReviewResult, Finding, Classification, CheckStatus
 
+
+class AIFinding(BaseModel):
+    """Schema for a single AI finding — used as Gemini response_schema."""
+    title: str
+    severity: str
+    file: str = ""
+    line: int = 0
+    description: str
+    reasoning: str
+    recommendation: str
+
+
+class AIReviewResponse(BaseModel):
+    """Schema for the complete AI review — used as Gemini response_schema."""
+    summary: str
+    findings: List[AIFinding] = []
+
+
 def run_ai_review(context: str) -> AIReviewResult:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    """Run independent AI code review using Google Gemini."""
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return AIReviewResult(
-            summary="AI review unavailable. Set ANTHROPIC_API_KEY.",
+            summary="AI review unavailable. Set GEMINI_API_KEY environment variable.",
             findings=[],
-            status=CheckStatus.NOT_AVAILABLE
+            status=CheckStatus.NOT_AVAILABLE,
+            provider="gemini",
         )
-
-    client = Anthropic(api_key=api_key)
-
-    tools = [
-        {
-            "name": "report_findings",
-            "description": "Report the findings of the code review",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "summary": {
-                        "type": "string",
-                        "description": "A brief summary of the review"
-                    },
-                    "findings": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "title": {"type": "string"},
-                                "severity": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]},
-                                "file": {"type": "string"},
-                                "line": {"type": "integer"},
-                                "description": {"type": "string"},
-                                "reasoning": {"type": "string"},
-                                "recommendation": {"type": "string"}
-                            },
-                            "required": ["title", "severity", "description", "reasoning", "recommendation"]
-                        }
-                    }
-                },
-                "required": ["summary", "findings"]
-            }
-        }
-    ]
 
     try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=tools,
-            tool_choice={"type": "tool", "name": "report_findings"},
-            messages=[
-                {"role": "user", "content": context}
-            ]
+        from google import genai
+
+        client = genai.Client(api_key=api_key)
+
+        prompt = f"{SYSTEM_PROMPT}\n\n---\n\n{context}"
+
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": AIReviewResponse,
+            },
         )
-        
-        # Extract the tool use payload
-        tool_use = next((block for block in response.content if block.type == 'tool_use'), None)
-        if not tool_use:
-             return AIReviewResult(
-                summary="AI model failed to return structured findings.",
-                findings=[],
-                status=CheckStatus.ERROR
-            )
-            
-        data = tool_use.input
-        
-        findings = []
-        for item in data.get("findings", []):
+
+        data = response.parsed
+        if data is None:
+            # Fallback: try parsing the text manually
+            try:
+                raw = json.loads(response.text)
+                data = AIReviewResponse.model_validate(raw)
+            except Exception:
+                return AIReviewResult(
+                    summary="AI model returned unparseable output.",
+                    findings=[],
+                    status=CheckStatus.ERROR,
+                    provider="gemini",
+                )
+
+        findings: List[Finding] = []
+        for item in data.findings:
             findings.append(Finding(
-                id="ai-" + str(hash(item.get("title", "")))[:8],
+                id=f"ai-{abs(hash(item.title)) % 100000}",
                 source="ai-critic",
                 classification=Classification.UNCONFIRMED,
-                severity=item.get("severity", "MEDIUM"),
-                title=item.get("title"),
-                description=item.get("description"),
-                file=item.get("file"),
-                line=item.get("line"),
-                evidence=item.get("reasoning"),
-                recommendation=item.get("recommendation")
+                severity=item.severity or "MEDIUM",
+                title=item.title,
+                description=item.description,
+                file=item.file or None,
+                line=item.line if item.line and item.line > 0 else None,
+                evidence=item.reasoning,
+                recommendation=item.recommendation,
             ))
-            
+
         return AIReviewResult(
-            summary=data.get("summary", "Review complete."),
+            summary=data.summary,
             findings=findings,
-            status=CheckStatus.PASSED
+            status=CheckStatus.PASSED,
+            provider="gemini",
         )
-        
-    except APIError as e:
-        return AIReviewResult(
-            summary=f"API request failed: {str(e)}",
-            findings=[],
-            status=CheckStatus.ERROR
-        )
+
     except Exception as e:
         return AIReviewResult(
             summary=f"AI review failed: {str(e)}",
             findings=[],
-            status=CheckStatus.ERROR
+            status=CheckStatus.ERROR,
+            provider="gemini",
         )

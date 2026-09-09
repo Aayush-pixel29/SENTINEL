@@ -2,75 +2,212 @@
 
 > **AI writes the code. Sentinel verifies what can actually be verified.**
 
+Evidence-driven verification for AI-generated code.
+
+**Challenge:** Developer Productivity  
+**Category:** Understand + Test + Review + Ship
+
+---
+
 ## The Problem
-AI coding increases development speed but shifts effort toward verification and review. An AI coding agent can tell you its implementation is correct, but *another AI opinion isn't proof*. The cost of generating code is falling faster than the cost of trusting it.
+
+AI coding agents (Claude Code, Gemini, Cursor, Copilot, Codex) can generate a code change in seconds.
+
+But *verifying* that change is still expensive. When an AI says "Done. Tests are passing.", the developer has to ask:
+
+- What actually changed?
+- Did the tests pass?
+- Did it break typing / linting?
+- Did it introduce a security problem?
+- Did it expose a secret?
+- Did it change dependencies dangerously?
+- Can I trust this change enough to merge?
+
+**The cost of generating code is falling faster than the cost of trusting it.**
 
 ## The Solution
-Sentinel provides a local verification layer that runs actual engineering checks and independently reviews AI-generated changes. 
 
-Sentinel separates deterministic evidence from AI reasoning and clearly labels what is confirmed, unconfirmed, unavailable or incomplete.
+Sentinel answers all of those questions in **one verification step**.
 
-## Why Sentinel is different
-- **AI opinion ≠ proof**: We don't replace real checks with LLMs.
-- **CONFIRMED vs UNCONFIRMED**: A SQL injection found by Semgrep is *Confirmed*. A potential authorization issue raised by an LLM is *Unconfirmed*.
-
-## Architecture
 ```
-Git Diff -> Subprocess Check Engine (pytest, ruff, mypy, semgrep, gitleaks, pip-audit)
-          -> Independent AI Review (Claude)
-          -> Evidence Synthesis Engine
-          -> Verdict (BLOCKED / REVIEW / VERIFIED / INCOMPLETE)
+AI coding agent
+      |
+   code change
+      |
+   SENTINEL
+      |-- Git diff analysis
+      |-- Tests (pytest)
+      |-- Lint (ruff)
+      |-- Type checking (mypy)
+      |-- Security analysis (Semgrep)
+      |-- Secret detection (Gitleaks)
+      |-- Dependency audit (pip-audit)
+      |-- Independent AI reasoning (Gemini)
+      |
+   Evidence synthesis
+      |
+   BLOCKED / INCOMPLETE / REVIEW / VERIFIED
+      |
+   Human decides
 ```
+
+## Why Sentinel Is Different
+
+| AI opinion | Sentinel evidence |
+|---|---|
+| "This looks secure." | Semgrep detected SQL injection at `app/api.py:28` |
+| Not proof | **Deterministic fact** |
+
+Sentinel separates:
+
+- **CONFIRMED** -- a deterministic tool produced a finding (fact)
+- **UNCONFIRMED** -- AI raised a concern requiring human verification (reasoning)
+
+We never say "AI found a vulnerability." We say "AI raised a concern."
 
 ## Installation
+
 ```bash
-git clone https://github.com/example/sentinel.git
-cd sentinel
+git clone https://github.com/Aayush-pixel29/SENTINEL.git
+cd SENTINEL
 pip install -e .
 ```
 
+Set your Gemini API key:
+```bash
+export GEMINI_API_KEY="your_key_here"     # macOS/Linux
+$env:GEMINI_API_KEY="your_key_here"       # PowerShell
+```
+
 ## Configuration
-Create a `.sentinel/config.yml` in your project root:
+
+Create `.sentinel/config.yml` in your project root:
+
 ```yaml
 project:
-  name: demo-app
+  name: my-app
   language: python
+  framework: fastapi
+
+task:
+  description: "Add a user profile lookup endpoint."
 
 checks:
   test:
     enabled: true
     command: "pytest"
-```
+  lint:
+    enabled: true
+    command: "ruff check ."
+  typecheck:
+    enabled: true
+    command: "mypy ."
+  semgrep:
+    enabled: true
+  secrets:
+    enabled: true
+  dependencies:
+    enabled: true
 
-Set your API key for the AI Critic:
-```bash
-export ANTHROPIC_API_KEY="sk-..."
+ai:
+  enabled: true
 ```
 
 ## Usage
-Run verification:
+
+### Verify your changes
 ```bash
 sentinel verify
 ```
 
-Generate an AI Use Declaration:
+### Open the local dashboard
+```bash
+sentinel ui
+```
+
+### Generate an AI use declaration
 ```bash
 sentinel declare
 ```
 
+## Example Flow
+
+```
+$ sentinel verify
+
+----------------------------------------------
+              S E N T I N E L
+     Evidence-driven code verification
+----------------------------------------------
+
+  Repository   SENTINEL
+  Branch       main
+  Commit       a84c2d1
+
+Analyzing Git changes ...
+
+CHANGE  (staged)
+  Files changed     3
+  Lines added       +87
+  Lines removed     -14
+
+DETERMINISTIC CHECKS
+
+  pytest           PASS
+  ruff             PASS
+  mypy             PASS
+  semgrep          FAIL  1 finding(s)
+  gitleaks         PASS
+  pip-audit        PASS
+
+AI REVIEW
+
+  1 unconfirmed concern(s)
+
+----------------------------------------------
+
+VERDICT
+
+  BLOCKED
+
+CONFIRMED
+
+  SQL Injection  demo/vulnerable-fastapi/main.py:28
+     Detected by semgrep
+
+UNCONFIRMED (AI)
+
+  Authorization boundary may be incomplete
+     demo/vulnerable-fastapi/main.py:28
+```
+
 ## Security & Responsible AI
-Sentinel does not execute AI-generated exploit payloads. It is a local tool designed to assist human judgment, not replace it. Sentinel does not claim that AI-generated software is safe because an AI said it was safe. Deterministic findings are reported separately from AI suspicions. A clean report does not guarantee completely secure software.
+
+- Sentinel does **not** execute AI-generated exploit payloads.
+- Sentinel does **not** claim AI-generated software is safe because an AI said so.
+- Deterministic findings are reported separately from AI suspicions.
+- AI findings are labelled **UNCONFIRMED** and require human verification.
+- A clean report does **not** guarantee completely secure software.
+- No API keys are stored in reports, logs, or terminal output.
 
 ## Limitations
-- No guarantee of absolute security
-- AI findings can be wrong
+
+- AI findings can be wrong (they are reasoning, not proof)
 - Scanners have coverage limitations
-- Only configured checks run
+- Only configured checks are executed
 - AI provider availability affects AI review
+- No guarantee of absolute security
 
 ## Roadmap
-- GitHub Action
+
+- GitHub Action integration
 - VS Code extension
-- Support for JavaScript/TypeScript, Go, Rust, Java
-- Multiple AI Providers
-- CI Policy Enforcement
+- JavaScript/TypeScript, Go, Rust, Java support
+- Multiple AI providers
+- Verification history
+- CI policy enforcement
+- Agent/MCP security analysis
+
+## License
+
+MIT

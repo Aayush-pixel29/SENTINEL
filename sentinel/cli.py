@@ -1,14 +1,16 @@
+import json
+import os
+import webbrowser
+import http.server
+import threading
+from pathlib import Path
+from datetime import datetime, timezone
+
 import typer
 from rich.console import Console
 
-app = typer.Typer(help="Sentinel - AI Code Verification Layer")
-console = Console()
-
-import json
-import os
-from pathlib import Path
 from sentinel.config import load_config
-from sentinel.git.diff import get_git_diff
+from sentinel.git.diff import get_git_diff, get_current_branch, get_current_commit, get_repo_name
 from sentinel.checks.tests import PytestCheck
 from sentinel.checks.lint import RuffCheck
 from sentinel.checks.typecheck import MypyCheck
@@ -18,156 +20,207 @@ from sentinel.checks.dependencies import PipAuditCheck
 from sentinel.engine.evidence import get_confirmed_findings, get_unconfirmed_findings, gather_evidence_context
 from sentinel.engine.verdict import determine_verdict
 from sentinel.ai.critic import run_ai_review
-from sentinel.models import VerificationReport
+from sentinel.models import VerificationReport, CheckStatus
 from sentinel.report.markdown import generate_markdown_report
 from sentinel.report.json import generate_json_report
 
-app = typer.Typer(help="Sentinel - AI Code Verification Layer")
+app = typer.Typer(help="Sentinel - Evidence-driven verification for AI-generated code")
 console = Console()
+
 
 @app.command()
 def verify(config: str = typer.Option(".sentinel/config.yml", help="Path to config file")):
-    """
-    Run Sentinel verification pipeline.
-    """
-    console.print(r"""[bold cyan]
-╭──────────────────────────────────────────────╮
-│                 SENTINEL                     │
-│       AI Code Verification                   │
-╰──────────────────────────────────────────────╯
+    """Run Sentinel verification pipeline on current Git changes."""
+
+    console.print("""[bold cyan]
+----------------------------------------------
+              S E N T I N E L
+     Evidence-driven code verification
+----------------------------------------------
 [/bold cyan]""")
-    
+
     settings = load_config(config)
-    
-    console.print("Analyzing Git changes...")
+
+    # -- Git metadata ----------------------------------------------------------
+    repo_name = get_repo_name()
+    branch = get_current_branch()
+    commit = get_current_commit()
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    console.print(f"  Repository   [bold]{repo_name}[/bold]")
+    console.print(f"  Branch       {branch}")
+    console.print(f"  Commit       {commit}")
+    console.print()
+
+    # -- Git diff --------------------------------------------------------------
+    console.print("Analyzing Git changes ...")
     try:
         diff = get_git_diff()
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red]\n{e}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(1)
-        
-    console.print(f"\n[bold]CHANGE[/bold]")
-    console.print(f"  Files changed     {diff.files_changed}")
-    console.print(f"  Lines added       {diff.lines_added}")
-    console.print(f"  Lines removed     {diff.lines_removed}")
 
+    if diff.files_changed == 0:
+        console.print("[yellow]No changes detected.[/yellow] Stage or modify files first.")
+        raise typer.Exit(0)
+
+    console.print(f"\n[bold]CHANGE[/bold]  ({diff.diff_source})")
+    console.print(f"  Files changed     {diff.files_changed}")
+    console.print(f"  Lines added       +{diff.lines_added}")
+    console.print(f"  Lines removed     -{diff.lines_removed}")
+
+    # -- Deterministic checks --------------------------------------------------
     console.print("\n[bold]DETERMINISTIC CHECKS[/bold]\n")
-    
-    # Initialize configured checks
+
     check_runners = []
-    if settings.checks.test.enabled: check_runners.append(PytestCheck())
-    if settings.checks.lint.enabled: check_runners.append(RuffCheck())
-    if settings.checks.typecheck.enabled: check_runners.append(MypyCheck())
-    if settings.checks.semgrep.enabled: check_runners.append(SemgrepCheck())
-    if settings.checks.secrets.enabled: check_runners.append(GitleaksCheck())
-    if settings.checks.dependencies.enabled: check_runners.append(PipAuditCheck())
+    if settings.checks.test.enabled:
+        check_runners.append(PytestCheck())
+    if settings.checks.lint.enabled:
+        check_runners.append(RuffCheck())
+    if settings.checks.typecheck.enabled:
+        check_runners.append(MypyCheck())
+    if settings.checks.semgrep.enabled:
+        check_runners.append(SemgrepCheck())
+    if settings.checks.secrets.enabled:
+        check_runners.append(GitleaksCheck())
+    if settings.checks.dependencies.enabled:
+        check_runners.append(PipAuditCheck())
 
     results = []
     for runner in check_runners:
-        with console.status(f"Running {runner.name}...") as status:
+        with console.status(f"Running {runner.name} ..."):
             res = runner.run()
             results.append(res)
-            icon = "✓" if res.status == "PASSED" else "✗" if res.status == "FAILED" else "⚪"
-            summary_text = f"passed" if res.status == "PASSED" else f"{len(res.findings)} finding(s)" if res.findings else res.status.value
-            console.print(f"  {icon} {runner.name.ljust(18)} {summary_text}")
-            
+            if res.status == CheckStatus.PASSED:
+                icon, style = "[green]PASS[/green]", "green"
+            elif res.status == CheckStatus.FAILED:
+                n = len(res.findings)
+                icon = f"[red]FAIL[/red]  {n} finding(s)" if n else "[red]FAIL[/red]"
+                style = "red"
+            else:
+                icon, style = f"[dim]{res.status.value}[/dim]", "dim"
+            console.print(f"  {runner.name.ljust(16)} {icon}")
+
     confirmed = get_confirmed_findings(results)
-    
-    console.print("\n[bold]AI CRITIC[/bold]\n")
-    
+
+    # -- AI critic -------------------------------------------------------------
+    console.print("\n[bold]AI REVIEW[/bold]\n")
+
     ai_result = None
+    unconfirmed = []
     if settings.ai.enabled:
-        with console.status("Running independent AI review...") as status:
+        with console.status("Running independent AI review (Gemini) ..."):
             context = gather_evidence_context(diff, results, settings.task.description)
             ai_result = run_ai_review(context)
             unconfirmed = get_unconfirmed_findings(ai_result)
-            if ai_result.status == "PASSED":
+            if ai_result.status == CheckStatus.PASSED:
                 if unconfirmed:
-                    console.print(f"  ⚠ {len(unconfirmed)} unconfirmed concern(s)")
+                    console.print(f"  [yellow]{len(unconfirmed)} unconfirmed concern(s)[/yellow]")
                 else:
-                    console.print("  ✓ No concerns raised")
+                    console.print("  [green]No concerns raised[/green]")
+            elif ai_result.status == CheckStatus.NOT_AVAILABLE:
+                console.print(f"  [dim]Unavailable: {ai_result.summary}[/dim]")
             else:
-                 console.print(f"  ⚪ AI review unavailable: {ai_result.summary}")
+                console.print(f"  [red]Error: {ai_result.summary}[/red]")
     else:
-        unconfirmed = []
-        console.print("  ⚪ AI review disabled")
+        console.print("  [dim]AI review disabled in config[/dim]")
 
-    console.print("\n──────────────────────────────────────────────\n")
-    
-    verdict = determine_verdict(results, confirmed, unconfirmed, ai_result.status if ai_result else "SKIPPED")
-    
+    # -- Verdict ---------------------------------------------------------------
+    console.print("\n----------------------------------------------\n")
+
+    ai_status = ai_result.status if ai_result else CheckStatus.SKIPPED
+    verdict = determine_verdict(results, confirmed, unconfirmed, ai_status)
+
     console.print("[bold]VERDICT[/bold]\n")
-    if verdict == "BLOCKED":
-        console.print("  [bold red]🔴 BLOCKED[/bold red]\n")
-    elif verdict == "REVIEW":
-        console.print("  [bold yellow]🟡 REVIEW[/bold yellow]\n")
-    elif verdict == "INCOMPLETE":
-        console.print("  [bold white]⚪ INCOMPLETE[/bold white]\n")
-    else:
-        console.print("  [bold green]🟢 VERIFIED[/bold green]\n")
+    verdict_display = {
+        "BLOCKED":    "  [bold red]BLOCKED[/bold red]",
+        "REVIEW":     "  [bold yellow]REVIEW[/bold yellow]",
+        "INCOMPLETE": "  [dim]INCOMPLETE[/dim]",
+        "VERIFIED":   "  [bold green]VERIFIED[/bold green]",
+    }
+    console.print(verdict_display.get(verdict.value, verdict.value))
+    console.print()
 
+    # -- Findings summary ------------------------------------------------------
     if confirmed:
         console.print("[bold]CONFIRMED[/bold]\n")
         for f in confirmed:
-            console.print(f"  [red]🔴 {f.title}[/red]")
-            if f.file:
-                console.print(f"     {f.file}:{f.line if f.line else ''}")
+            loc = f"  {f.file}:{f.line}" if f.file else ""
+            console.print(f"  [red]{f.title}[/red]{loc}")
             console.print(f"     Detected by {f.source}\n")
 
     if unconfirmed:
-        console.print("[bold]UNCONFIRMED[/bold]\n")
+        console.print("[bold]UNCONFIRMED (AI)[/bold]\n")
         for f in unconfirmed:
-            console.print(f"  [yellow]🟡 {f.title}[/yellow]")
-            if f.file:
-                console.print(f"     {f.file}:{f.line if f.line else ''}")
-            console.print("")
+            loc = f"  {f.file}:{f.line}" if f.file else ""
+            console.print(f"  [yellow]{f.title}[/yellow]{loc}")
+            if f.recommendation:
+                console.print(f"     {f.recommendation}")
+            console.print()
 
-    console.print("──────────────────────────────────────────────\n")
-    
-    # Generate reports
+    console.print("----------------------------------------------\n")
+
+    # -- Reports ---------------------------------------------------------------
     report = VerificationReport(
         verdict=verdict,
+        repository=repo_name,
+        branch=branch,
+        commit=commit,
+        timestamp=timestamp,
+        task_description=settings.task.description,
         changed_files=diff.changed_files_list,
         checks=results,
         confirmed_findings=confirmed,
         unconfirmed_findings=unconfirmed,
-        ai_review=ai_result.model_dump() if ai_result else {"summary": "Disabled"}
+        ai_review=ai_result.model_dump() if ai_result else {"summary": "Disabled"},
+        ai_provider=ai_result.provider if ai_result else "",
     )
-    
+
+    os.makedirs(".sentinel", exist_ok=True)
     generate_markdown_report(report, ".sentinel/report.md")
     generate_json_report(report, ".sentinel/report.json")
-    
+
     console.print("Reports:")
     console.print("  .sentinel/report.md")
-    console.print("  .sentinel/report.json\n")
+    console.print("  .sentinel/report.json")
+    console.print("\nRun [bold]sentinel ui[/bold] to open the verification dashboard.\n")
 
 
 @app.command()
 def declare():
-    """
-    Generate an AI Use Declaration.
-    """
-    console.print("Generating AI Use Declaration...")
-    
+    """Generate an AI Use Declaration from the latest verification report."""
+
     report_path = Path(".sentinel/report.json")
     if not report_path.exists():
-        console.print("[bold red]Error:[/bold red] No verification report found. Run `sentinel verify` first.")
+        console.print("[bold red]Error:[/bold red] No verification report found. Run [bold]sentinel verify[/bold] first.")
         raise typer.Exit(1)
-        
+
     with open(report_path, "r") as f:
         data = json.load(f)
-        
+
     checks = [c["name"] for c in data.get("checks", [])]
-    
+    provider = data.get("ai_provider", "Gemini")
+    if not provider:
+        provider = "Gemini"
+
     declaration = f"""# AI Use Declaration
 
+## Project
+{data.get("repository", "unknown")}
+
+## Verification Run
+- Branch: {data.get("branch", "unknown")}
+- Commit: {data.get("commit", "unknown")}
+- Timestamp: {data.get("timestamp", "unknown")}
+- Verdict: **{data.get("verdict", "unknown")}**
+
 ## AI Tools Used
-- Claude 3.5 Sonnet
+- {provider.capitalize()} (independent code review)
 
 ## AI-Assisted Work
-- Code review
+- Code review and reasoning
 - Potential issue identification
-- Security and edge case reasoning
+- Security, edge-case, and specification-mismatch analysis
 
 ## Automated Verification (Deterministic)
 {chr(10).join([f"- {c}" for c in checks])}
@@ -175,21 +228,62 @@ def declare():
 ## Human Verification
 The developer reviewed the generated findings,
 validated changes, and made the final decision
-about whether the software was ready to submit.
+about whether the software was ready to merge.
 
 ## Limitations
-AI findings are not treated as proof.
-Deterministic findings are reported separately.
-A clean report does not guarantee completely
-secure software.
+- AI findings are labelled UNCONFIRMED and are not treated as proof.
+- Deterministic findings are labelled CONFIRMED and reported separately.
+- A clean report does not guarantee completely secure software.
+- Only the checks listed above were executed.
 """
     with open("AI_USE_DECLARATION.md", "w", encoding="utf-8") as f:
         f.write(declaration)
-        
+
     console.print("Created [bold]AI_USE_DECLARATION.md[/bold]")
+
+
+@app.command()
+def ui(port: int = typer.Option(5000, help="Port for the local dashboard")):
+    """Open a local verification dashboard in the browser."""
+
+    report_path = Path(".sentinel/report.json")
+    if not report_path.exists():
+        console.print("[bold red]Error:[/bold red] No verification report found. Run [bold]sentinel verify[/bold] first.")
+        raise typer.Exit(1)
+
+    with open(report_path, "r") as f:
+        report_data = f.read()
+
+    from sentinel.ui.template import build_html
+    html_content = build_html(report_data)
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(html_content.encode("utf-8"))
+
+        def log_message(self, format, *args):
+            pass  # Silence request logs
+
+    server = http.server.HTTPServer(("127.0.0.1", port), Handler)
+
+    url = f"http://127.0.0.1:{port}"
+    console.print(f"Sentinel dashboard running at [bold cyan]{url}[/bold cyan]")
+    console.print("Press Ctrl+C to stop.\n")
+    webbrowser.open(url)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        console.print("\nDashboard stopped.")
+        server.server_close()
+
 
 def main():
     app()
+
 
 if __name__ == "__main__":
     main()
