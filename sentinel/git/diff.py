@@ -53,24 +53,29 @@ def get_git_diff() -> GitChangeSummary:
     if not is_git_repository():
         raise RuntimeError("Sentinel must be run inside a Git repository.")
 
+    def run_cmd(args):
+        result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if result.returncode == 0:
+            return result
+        return result
+
     # Try staged changes first
     diff_cmd = ["git", "diff", "--cached"]
     diff_stat_cmd = ["git", "diff", "--cached", "--numstat"]
     diff_source = "staged"
 
-    result = subprocess.run(diff_cmd, capture_output=True, text=True, timeout=30)
-    if not result.stdout.strip():
+    result = run_cmd(diff_cmd)
+    diff_text = result.stdout if result.returncode == 0 else ""
+    if not diff_text.strip():
         # Fall back to working tree diff
         diff_cmd = ["git", "diff"]
         diff_stat_cmd = ["git", "diff", "--numstat"]
         diff_source = "working-tree"
-        result = subprocess.run(diff_cmd, capture_output=True, text=True, timeout=30)
-
-    diff_text = result.stdout
+        result = run_cmd(diff_cmd)
+        diff_text = result.stdout if result.returncode == 0 else ""
 
     # Get numstat to count added/removed lines and files
-    stat_result = subprocess.run(diff_stat_cmd, capture_output=True, text=True, timeout=30)
-
+    stat_result = run_cmd(diff_stat_cmd)
     files_changed = 0
     lines_added = 0
     lines_removed = 0

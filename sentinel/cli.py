@@ -290,7 +290,7 @@ def explain():
         console.print("[bold red]Error:[/bold red] No verification report found. Run [bold]sentinel verify[/bold] first.")
         raise typer.Exit(1)
 
-    with open(report_path, "r") as f:
+    with open(report_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     verdict = data.get("verdict", "UNKNOWN")

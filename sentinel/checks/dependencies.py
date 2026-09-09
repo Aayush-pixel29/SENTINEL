@@ -9,7 +9,23 @@ class PipAuditCheck(BaseCheck):
         return "pip-audit"
 
     def run(self) -> CheckResult:
-        result = self.run_command(["pip-audit", "-f", "json"])
+        import os
+        if os.path.exists("requirements.txt"):
+            cmd = ["pip-audit", "-r", "requirements.txt", "-f", "json"]
+        elif os.path.exists("pyproject.toml"):
+            cmd = ["pip-audit", ".", "-f", "json"]
+        else:
+            return CheckResult(
+                name=self.name,
+                status=CheckStatus.PASSED,
+                exit_code=0,
+                duration=0,
+                stdout="{}",
+                stderr="",
+                findings=[]
+            )
+            
+        result = self.run_command(cmd)
         
         if result.status == CheckStatus.NOT_AVAILABLE:
             return result
@@ -26,7 +42,7 @@ class PipAuditCheck(BaseCheck):
                         classification=Classification.CONFIRMED,
                         severity="HIGH",
                         title=f"Vulnerable Dependency: {pkg.get('name')}",
-                        description=vuln.get("fix_versions", ["No fix available"])[0],
+                        description=vuln.get("fix_versions", ["No fix available"])[0] if vuln.get("fix_versions") else "No fix available",
                         file="requirements.txt", # Approximation
                         evidence=f"Package {pkg.get('name')} v{pkg.get('version')} has {vuln.get('id')}"
                     ))

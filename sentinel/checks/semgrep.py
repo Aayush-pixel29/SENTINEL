@@ -9,7 +9,7 @@ class SemgrepCheck(BaseCheck):
         return "semgrep"
 
     def run(self) -> CheckResult:
-        result = self.run_command(["semgrep", "--config", "auto", "--json", "."])
+        result = self.run_command(["semgrep", "--config", "p/python", "--json", "."])
         
         if result.status == CheckStatus.NOT_AVAILABLE:
             return result

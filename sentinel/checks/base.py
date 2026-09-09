@@ -18,7 +18,7 @@ class BaseCheck(ABC):
     def run_command(self, cmd: List[str]) -> CheckResult:
         start_time = time.time()
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
             duration = time.time() - start_time
             return CheckResult(
                 name=self.name,
