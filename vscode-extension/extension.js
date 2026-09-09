@@ -140,13 +140,17 @@ function updateDiagnostics() {
       severity
     );
     diagnostic.source = "Sentinel";
-    diagnostics.set(uri.toString(), { uri, diagnostic });
+    const uriStr = uri.toString();
+    if (!diagnostics.has(uriStr)) {
+      diagnostics.set(uriStr, { uri, diags: [] });
+    }
+    diagnostics.get(uriStr).diags.push(diagnostic);
   }
 
   const collection = vscode.languages.createDiagnosticCollection("sentinel");
   collection.clear();
-  for (const { uri, diagnostic } of diagnostics.values()) {
-    collection.set(uri, [diagnostic]);
+  for (const { uri, diags } of diagnostics.values()) {
+    collection.set(uri, diags);
   }
   viewProvider?.setDiagnosticCollection(collection);
 }
@@ -201,9 +205,13 @@ function setup() {
 
   const terminal = vscode.window.createTerminal({ name: "Sentinel Setup", cwd: root });
   terminal.show();
-  terminal.sendText(
-    'python -m pip install -e "https://github.com/Aayush-pixel29/SENTINEL.git"'
-  );
+  
+  const isSentinelRepo = fs.existsSync(path.join(root, "sentinel", "cli.py")) && fs.existsSync(path.join(root, "pyproject.toml"));
+  const installCmd = isSentinelRepo 
+    ? 'python -m pip install -e .' 
+    : 'python -m pip install git+https://github.com/Aayush-pixel29/SENTINEL.git';
+    
+  terminal.sendText(installCmd);
   vscode.window.showInformationMessage(
     "Sentinel setup command opened in the terminal. After installation, run Sentinel: Verify Changes."
   );
