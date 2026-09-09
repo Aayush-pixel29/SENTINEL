@@ -1,0 +1,9 @@
+Add a user profile lookup endpoint.
+
+The endpoint should:
+- accept a user ID
+- retrieve the user's profile
+- return the profile to the authenticated user
+- reject access to another user's profile
+- validate the input
+- include regression tests

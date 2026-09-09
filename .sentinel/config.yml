@@ -1,0 +1,27 @@
+project:
+  name: demo-app
+  language: python
+  framework: fastapi
+
+task:
+  description: "Add a user profile lookup endpoint. The endpoint should reject access to another user's profile."
+
+checks:
+  test:
+    enabled: true
+    command: "pytest"
+  lint:
+    enabled: true
+    command: "ruff check ."
+  typecheck:
+    enabled: true
+    command: "mypy ."
+  semgrep:
+    enabled: true
+  secrets:
+    enabled: true
+  dependencies:
+    enabled: true
+
+ai:
+  enabled: true
