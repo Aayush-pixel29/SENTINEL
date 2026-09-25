@@ -1,61 +1,59 @@
-# Sentinel VS Code Extension
+# SENTINEL-X VS Code Extension
 
-Sentinel brings the existing Sentinel verification engine into VS Code.
+**AI Agent Reliability, Security & Verification Control Plane, directly inside VS Code.**
 
-## Developer experience
+SENTINEL-X embeds the verification engine, ToolShield security policies, event timeline, deterministic findings, and token/latency telemetry directly into your IDE.
 
-1. Install this extension.
-2. Open any Git repository.
-3. Run **Sentinel: Setup Verification Engine** once if the CLI is not installed.
-4. Click the Sentinel shield in the Activity Bar.
-5. Click **Verify Changes**.
+---
 
-The extension runs the existing `sentinel verify` CLI in the current workspace. It then reads `.sentinel/report.json` and presents the verdict, checks, findings, and explanations inside VS Code.
+## Developer Experience
+
+1. Open any Git repository workspace in VS Code.
+2. If using for the first time, click **Sentinel-X: Setup Engine** or run `pip install -e .` in your terminal.
+3. Click the 🛡 **Sentinel-X** icon in the Activity Bar.
+4. Click **Verify Changes**.
+5. The extension runs the local Python verification engine (`sentinel verify --eval`), loads `.sentinel/report.json`, and updates:
+   - In-editor diagnostic squiggles (red for confirmed critical bugs/vulnerabilities, yellow for unconfirmed AI concerns).
+   - Sidebar verdict badge, deterministic check results, ToolShield decisions, and LLM telemetry.
+   - Click any finding in the sidebar to jump directly to the exact file and line in the editor.
+
+---
 
 ## Architecture
 
 ```text
-VS Code
-  ↓
-Sentinel Extension
-  ↓
-sentinel verify
-  ↓
-Git diff + pytest + Ruff + mypy + Semgrep + Gitleaks + pip-audit + Gemini
-  ↓
-.sentinel/report.json
-  ↓
-Sentinel sidebar + VS Code diagnostics
+VS Code (Activity Bar & Diagnostics)
+  │
+  ▼
+SENTINEL-X Extension (`extension.js`)
+  │
+  ▼
+`sentinel verify --eval` (Python Engine)
+  │
+  ├── Git Inspection (diff, branch, commit)
+  ├── Deterministic Checks (Pytest, Semgrep, Gitleaks, Pip-audit, Ruff, Mypy)
+  ├── ToolShield Security & Policy Engine
+  ├── Independent AI Critic (Gemini)
+  └── Telemetry & Cost Accounting
+  │
+  ▼
+`.sentinel/report.json`
+  │
+  ▼
+Sidebar Webview & In-Editor Diagnostics
 ```
 
-The extension is intentionally thin: the Python verification engine remains the source of truth.
+---
 
-## Install from source during the hackathon
+## Extension Commands
 
-Open this folder in VS Code and press `F5` to launch an Extension Development Host.
+- `Sentinel-X: Verify Changes` (`sentinel.verify`)
+- `Sentinel-X: Explain Verdict` (`sentinel.explain`)
+- `Sentinel-X: Open Verification Report` (`sentinel.openReport`)
+- `Sentinel-X: Setup Engine` (`sentinel.setup`)
 
-For packaging, install `@vscode/vsce` and run `vsce package`.
+---
 
-## CLI requirement
+## License
 
-The extension expects the Sentinel Python CLI to be available as `sentinel`. It also falls back to `python -m sentinel.cli verify` when the command is not found.
-
-For a developer using the published GitHub repository:
-
-```bash
-python -m pip install -e .
-```
-
-Then open their own repository in VS Code and run Sentinel from the Sentinel sidebar.
-
-## Current scope
-
-- One-click verification
-- Verdict in the Activity Bar
-- Check status
-- Confirmed vs unconfirmed findings
-- Click a finding to jump to its file/line
-- Explain verdict
-- Optional verify-on-save
-- No source-code upload service
-- No database
+MIT License. See repository `LICENSE` for details.

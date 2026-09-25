@@ -1,8 +1,8 @@
 {
-  "name": "sentinel-code-verification",
-  "displayName": "Sentinel — AI Code Verification",
-  "description": "Evidence-driven verification for AI-generated code, directly inside VS Code.",
-  "version": "0.1.0",
+  "name": "sentinel-x-control-plane",
+  "displayName": "SENTINEL-X — AI Agent Reliability, Security & Verification",
+  "description": "AI Agent Reliability, Security & Verification Control Plane, directly inside VS Code.",
+  "version": "2.0.0",
   "icon": "media/sentinel.png",
   "publisher": "sentinel-dev",
   "license": "MIT",
@@ -15,15 +15,17 @@
   },
   "categories": [
     "Linters",
+    "Security",
     "Other"
   ],
   "keywords": [
-    "ai",
-    "code review",
+    "ai agents",
     "security",
-    "verification",
+    "code verification",
+    "tool security",
+    "reliability",
     "semgrep",
-    "developer productivity"
+    "mcp"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -34,36 +36,36 @@
     "commands": [
       {
         "command": "sentinel.verify",
-        "title": "Sentinel: Verify Changes",
+        "title": "Sentinel-X: Verify Changes",
         "icon": "$(shield)"
       },
       {
         "command": "sentinel.openReport",
-        "title": "Sentinel: Open Verification Report",
+        "title": "Sentinel-X: Open Verification Report",
         "icon": "$(check-all)"
       },
       {
         "command": "sentinel.explain",
-        "title": "Sentinel: Explain Verdict",
+        "title": "Sentinel-X: Explain Verdict",
         "icon": "$(question)"
       },
       {
         "command": "sentinel.setup",
-        "title": "Sentinel: Setup Verification Engine"
+        "title": "Sentinel-X: Setup Engine"
       }
     ],
     "configuration": {
-      "title": "Sentinel",
+      "title": "Sentinel-X",
       "properties": {
         "sentinel.cliPath": {
           "type": "string",
           "default": "sentinel",
-          "description": "Path or command used to run the Sentinel CLI."
+          "description": "Path or command used to run the Sentinel-X CLI."
         },
         "sentinel.autoVerifyOnSave": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically verify Git changes after saving a file. Disabled by default because full verification may take time."
+          "description": "Automatically verify Git changes after saving a file."
         }
       }
     },
@@ -71,7 +73,7 @@
       "activitybar": [
         {
           "id": "sentinel",
-          "title": "Sentinel",
+          "title": "Sentinel-X",
           "icon": "media/sentinel.svg"
         }
       ]
@@ -80,7 +82,7 @@
       "sentinel": [
         {
           "id": "sentinel.verificationView",
-          "name": "Verification",
+          "name": "Verification & Control Plane",
           "type": "webview"
         }
       ]

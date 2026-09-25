@@ -5,27 +5,15 @@
 [![CI/CD Verification Gate](https://github.com/Aayush-pixel29/SENTINEL/actions/workflows/sentinel.yml/badge.svg)](https://github.com/Aayush-pixel29/SENTINEL/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Tests: 44 Passing](https://img.shields.io/badge/tests-44%20passed-success.svg)](tests/)
 
-> **AI writes the code & proposes actions. SENTINEL-X verifies what can be deterministically proven. Humans make the final decision.**
-
----
-
-## 1. The Problem
-
-The marginal cost of generating code and autonomous AI agent workflows is plummeting toward zero. However, the cost of **trusting and securing** autonomous agents is skyrocketing:
-
-- **Unrestricted Tool Abuse**: Persuasive adversarial prompts can coerce agents into invoking dangerous tools (e.g. raw shell commands, internal network fetches).
-- **Silent Credential Leakage**: Agents fetching configs or database strings unintentionally leak passwords, tokens, and PII into context windows and log streams.
-- **Flaky Execution & Side-Effect Duplication**: Lack of idempotency and checkpoint recovery causes unpredictable agent loops and duplicate side-effects.
-- **Unverified Hallucinations**: An LLM claiming *"Tests pass and code is safe"* provides zero mathematical or deterministic assurance.
-
-**The cost of generating AI code is falling faster than the cost of verifying it.**
+> **Problem**: The marginal cost of generating AI code and agent workflows is plummeting toward zero, but the cost of verifying, securing, and trusting autonomous tool execution is skyrocketing.
+>
+> **Solution**: SENTINEL-X is an open-source, local-first control plane that enforces deterministic tool security policies, redacts leaked credentials, prevents duplicate side-effects, scores agent safety benchmarks, and verifies code before humans decide to merge.
 
 ---
 
-## 2. The SENTINEL-X Solution
-
-**SENTINEL-X** is an open-source, local-first control plane that wraps AI agents and development workflows in a hardened verification boundary:
+## 1. Core Architecture
 
 ```text
 ┌────────────────────────────────────────────────────────┐
@@ -36,13 +24,15 @@ The marginal cost of generating code and autonomous AI agent workflows is plumme
 ┌────────────────────────────────────────────────────────┐
 │                SENTINEL-X CONTROL PLANE                │
 │                                                        │
-│  ├── 🛡 ToolShield Policy Engine (Allow/Deny/Review)   │
+│  ├── 🛡 ToolShield Policy Engine (Allow / Deny / Review)│
 │  ├── 🔒 Output Sanitizer (Secrets / Credentials / PII) │
+│  ├── 🔌 MCP-Compatible Tool Security Gateway          │
 │  ├── ⚡ Execution Manager (Idempotency & Retries)      │
 │  ├── 💾 Checkpoint & Recovery (Step Resumption)        │
 │  ├── 📊 Deterministic Evaluation & Red Team Suite      │
-│  ├── ⏱ Unified Event Traces (Waterfall Spans)          │
+│  ├── ⏱ Unified Event Traces (Waterfall Spans, JSONL)   │
 │  ├── 💰 Cost & Latency Telemetry (Normalized Pricing)  │
+│  ├── 🔀 Rule-Based Model Routing Abstraction           │
 │  └── 🔍 Code Verification (Pytest, Semgrep, Gitleaks)  │
 └───────────────────────────┬────────────────────────────┘
                             │
@@ -55,170 +45,154 @@ The marginal cost of generating code and autonomous AI agent workflows is plumme
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │           HUMAN DECISION & CI/CD QUALITY GATE          │
-│        (VS Code Extension, Web Dashboard, CI/CD)       │
+│   (VS Code Extension, Web Dashboard, GitHub Actions)   │
 └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Core Capabilities
+## 2. Feature Matrix
 
-### 🛡 ToolShield Security Policy Engine (`sentinel/shield/`)
-- **Explicit Tool Registry**: Hardened contracts with metadata: `trust_level` (`verified`, `trusted`, `unknown`, `blocked`), `risk` (`low`, `medium`, `high`, `critical`), and allowed operations.
-- **Deterministic Policy Pipeline**: Evaluates tool requests (`ALLOW`, `DENY`, `REVIEW`) without trusting LLM self-assessments.
-- **Injection Defense**: Scans arguments for path traversal (`../`), command chaining (`;`, `|`, `&&`), and shell pipes.
-
-### 🔒 Zero-Loss Tool Output Sanitizer (`sentinel/sanitizer/`)
-- Intercepts raw tool outputs before they enter agent context.
-- Detects and redacts database connection strings, API keys (OpenAI, Gemini, GitHub, AWS), Bearer tokens, private keys, and PII.
-
-### ⚡ Execution Reliability & Checkpoints (`sentinel/reliability/`)
-- **Idempotency & Duplicate Protection**: Prevents duplicate executions of side-effects using idempotency keys and state caching.
-- **Resilient Retries**: Configurable exponential backoff for transient network glitches.
-- **Step Checkpoints**: Lightweight snapshotting enabling execution resumption without re-running completed steps.
-
-### 📊 Deterministic Evaluation & Red Team Suite (`sentinel/eval/`)
-- **Deterministic Scorecards**: Benchmarks task success, tool selection, argument safety, output validity, latency, and cost.
-- **Red Team Corpus**: Built-in adversarial dataset covering prompt injection, evasion, secret extraction, and path traversal.
-
-### 💰 Cost & Latency Telemetry (`sentinel/metrics/`)
-- Normalized token accounting and pricing adapters for Google Gemini, OpenAI, Claude, and local models.
+| Subsystem | Capability | Current Implementation Scope |
+|:---|:---|:---|
+| **ToolShield** | Deterministic Tool Policy Engine | Explicit registry (`verified`, `trusted`, `unknown`, `blocked`), policy checks (`ALLOW`/`DENY`/`REVIEW`), argument injection & path-traversal validator. |
+| **Output Sanitizer** | Zero-Loss Secret Interceptor | Regex-based redaction of connection strings, API keys (OpenAI, Gemini, AWS, GitHub), Bearer tokens, private keys, and PII. |
+| **MCP Gateway** | MCP-Compatible Tool Gateway | Registers MCP-shaped schemas, binds local handlers, enforces ToolShield permissions, sanitizes outputs, and logs audit traces. |
+| **Execution Reliability** | Fault Tolerance & Idempotency | `ExecutionManager` tracking execution states, retry backoff, and duplicate protection via idempotency keys. |
+| **Checkpoint / Recovery** | Resilient State Snapshots | Saves and loads step states; enables resuming failed runs without re-running completed side-effects. |
+| **Evaluation Engine** | Deterministic Benchmarking | Automated test runner scoring task success, tool selection, safety, groundedness, latency, and cost. |
+| **Red Team Corpus** | Adversarial Security Suite | Evaluates defenses against prompt injection, tool hijacking, path traversal, and secret exfiltration (**6/6 test cases mitigated**). |
+| **Cost & Latency** | Telemetry Accounting | Normalized token usage and pricing adapter (Gemini, OpenAI, Claude, Local) computing estimated USD expenditure. |
+| **Model Router** | Model Routing Abstraction | Rule-based model selection directing tasks to `cheap`, `standard`, or `reasoning` tiers with fallback chains. |
+| **Code Verification** | Multi-engine code analysis | Deterministic tools (Pytest, Semgrep, Gitleaks, Pip-audit, Ruff, Mypy) paired with an independent Gemini AI critic. |
 
 ---
 
-## 4. Installation & Quickstart
+## 3. Quickstart (2-Minute Demo)
 
-### Prerequisites
-- Python 3.9+
-- Git
-
-### 1. Install SENTINEL-X Engine
+### 1. Installation
 ```bash
 git clone https://github.com/Aayush-pixel29/SENTINEL.git
 cd SENTINEL
 pip install -e .
 ```
 
-### 2. Optional: Configure AI Critic (Gemini)
+### 2. Run the Autonomous Mock Agent Demo
 ```bash
-export GEMINI_API_KEY="your_api_key_here"      # Linux / macOS
-$env:GEMINI_API_KEY="your_api_key_here"        # PowerShell
-```
-*(Note: SENTINEL-X deterministic checks, ToolShield, Sanitizer, and Evaluations run 100% locally even without an API key).*
-
----
-
-## 5. CLI Command Reference
-
-| Command | Description |
-|:---|:---|
-| `sentinel verify` | Run full verification pipeline on local Git changes |
-| `sentinel verify --eval` | Run verification + deterministic evaluation benchmark |
-| `sentinel redteam` | Run adversarial Red Team security test suite |
-| `sentinel eval` | Run deterministic evaluation test cases |
-| `sentinel trace [run_id]` | Inspect event spans, latency waterfall, and token costs |
-| `sentinel demo-agent` | Run interactive mock agent demo illustrating safety barriers |
-| `sentinel ui` | Launch local interactive web control plane dashboard |
-| `sentinel explain` | Explain verification verdict and evidence in plain English |
-| `sentinel declare` | Generate compliant `AI_USE_DECLARATION.md` |
-
----
-
-## 6. End-to-End Demo Scenario
-
-Run the autonomous mock agent demo to see the safety barriers in action:
-
-```bash
-# Run the local mock agent demo
 sentinel demo-agent
 ```
-
-**What the demo validates:**
-1. **Adversarial Tool Blockade**: Agent requests `raw_bash_exec` (`cat /etc/shadow`) -> **DENIED** by ToolShield.
-2. **Path Traversal Interception**: Agent requests `../../../../etc/passwd` -> **DENIED** by ArgumentValidator.
-3. **Output Sanitization**: Authorized database read containing plaintext connection passwords & emails -> Redacted automatically.
-4. **Idempotency Protection**: Duplicate execution request returns cached result with zero duplicate side-effects.
-5. **Red Team Suite**: All 6 adversarial attacks evaluated and mitigated (100.0% pass rate).
+**Demonstrates in real-time:**
+1. **Adversarial Tool Blockade**: Agent requests `raw_bash_exec` $\rightarrow$ **DENIED** by ToolShield.
+2. **Path Traversal Defense**: Agent requests `../../../../etc/passwd` $\rightarrow$ **DENIED** by ArgumentValidator.
+3. **Output Sanitization**: Database query returning raw connection passwords $\rightarrow$ Redacted automatically.
+4. **Idempotency Protection**: Duplicate request returns cached result with zero duplicate side-effects.
+5. **Red Team Suite**: 6/6 attacks in the deterministic corpus mitigated.
 6. **Telemetry & Report**: Full run trace and cost logged to `.sentinel/report.json`.
 
-Open the visual dashboard:
+### 3. Open the Interactive Web Control Plane
 ```bash
 sentinel ui
 ```
+Navigate to `http://127.0.0.1:5000` to inspect the visual event waterfall, ToolShield decisions, and evaluation scorecards.
 
 ---
 
-## 7. VS Code Extension
+## 4. CLI Command Reference
 
-SENTINEL-X integrates directly into VS Code:
-
-1. Open the repository root in VS Code.
-2. Open the `vscode-extension` directory and press `F5` to start the Extension Host.
-3. Click the 🛡 **Sentinel-X** icon in the Activity Bar.
-4. Click **Verify Changes** to run the control plane and view findings directly mapped to file lines.
-
----
-
-## 8. Philosophy: CONFIRMED vs UNCONFIRMED
-
-SENTINEL-X strictly separates deterministic proof from probabilistic AI suggestions:
-
-| Finding Type | Source | Definition |
-|:---|:---|:---|
-| **CONFIRMED** | Deterministic tools (Semgrep, Pytest, Gitleaks, Pip-audit) | **Mathematical / AST fact**. Triggers `BLOCKED` verdict if high severity. |
-| **UNCONFIRMED** | AI Critic / Agent Hypotheses | **Probabilistic concern**. Triggers `REVIEW` verdict; requires human decision. |
-
-### Verdict Hierarchy
-```text
-BLOCKED  ──▶ Critical confirmed vulnerabilities or failing unit tests
-   │
-INCOMPLETE ──▶ Missing verification tools or unhandled exceptions
-   │
-REVIEW   ──▶ Unconfirmed AI concerns or non-blocking findings
-   │
-VERIFIED ──▶ All required checks passed cleanly
+```bash
+sentinel verify          # Run verification on Git changes
+sentinel verify --eval   # Run verification + evaluation benchmark
+sentinel demo-agent      # Run end-to-end autonomous agent safety demo
+sentinel redteam         # Run adversarial Red Team security corpus
+sentinel eval            # Run deterministic evaluation benchmark
+sentinel trace           # Inspect event spans, latency, and costs
+sentinel ui              # Launch local interactive web control plane
+sentinel explain         # Explain verification verdict in plain English
+sentinel declare         # Generate compliant AI_USE_DECLARATION.md
 ```
 
 ---
 
-## 9. Security & Threat Model
+## 5. VS Code Extension
 
-See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for full threat analysis and trust boundary specifications.
-
-**Key Invariants:**
-- No arbitrary remote script execution without explicit allowlist policy.
-- No raw tool trust based on LLM opinion.
-- All secrets, API keys, and connection credentials redacted before entering logs or context.
+SENTINEL-X integrates directly into VS Code:
+1. Open the repository root in VS Code.
+2. Open [`vscode-extension/`](vscode-extension/) and press `F5` to launch the Extension Host.
+3. Click the 🛡 **Sentinel-X** icon in the Activity Bar.
+4. Click **Verify Changes** to run the control plane and navigate directly to findings in your source code.
 
 ---
 
-## 10. Documentation Index
+## 6. Security Philosophy & Threat Model
+
+SENTINEL-X strictly separates deterministic facts from probabilistic AI reasoning:
+
+| Finding Type | Source | Definition |
+|:---|:---|:---|
+| **CONFIRMED** | Deterministic tools (Semgrep, Pytest, Gitleaks) | **Mathematical / AST fact**. Triggers `BLOCKED` verdict on high/critical findings. |
+| **UNCONFIRMED** | AI Critic (Gemini) / Agent Hypotheses | **Probabilistic concern**. Triggers `REVIEW` verdict; requires human decision. |
+
+### Red Team Benchmark Results
+In our deterministic adversarial corpus ([`sentinel/eval/datasets/redteam_cases.json`](sentinel/eval/datasets/redteam_cases.json)), **6/6 attacks were mitigated**:
+- Path traversal in tool arguments (`rt_001`): **Blocked**
+- Command injection payloads (`rt_002`): **Blocked**
+- Persuasive unallowlisted tool request (`rt_003`): **Blocked**
+- Output secret & credential leakage (`rt_004`): **Redacted**
+- Shell pipe hijacking (`rt_005`): **Blocked**
+- PII exfiltration (`rt_006`): **Redacted**
+
+*(See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) for full threat analysis).*
+
+---
+
+## 7. Known Scope & Limitations
+
+1. **Rule-Based Model Router**: `ModelRouter` is currently an architectural abstraction that selects model tiers and fallback chains based on static budget and latency rules. It does not perform dynamic runtime model switching or self-optimizing cost routing.
+2. **MCP Gateway Scope**: `MCPGateway` is an MCP-compatible tool adapter for registering schemas and executing local Python handlers under ToolShield governance. It does not yet implement a full remote JSON-RPC transport client.
+3. **Regex-Based Sanitization**: The output sanitizer employs pattern matching for known token formats, connection URIs, private keys, and standard PII. Custom unstructured secrets should additionally be protected via environment segregation.
+4. **Local Execution Scope**: The execution reliability manager provides in-process duplicate protection and local checkpointing. It is designed for single-node / local workflows, not distributed multi-node consensus.
+
+---
+
+## 8. Validation Status
+
+**Validated locally on September 25, 2026:**
+- **Platform**: Windows 11 / Python 3.13 / PowerShell
+- **Test Suite**: 44 passed in 0.32s (`pytest`)
+- **CLI Commands**: `verify`, `eval`, `redteam`, `trace`, `demo-agent`, `ui`, `explain`, `declare` verified working.
+- **Git Working Tree**: Clean.
+
+---
+
+## 9. Documentation Index
 
 - [Architecture Specification](docs/ARCHITECTURE.md)
 - [Threat Model & Security Spec](docs/THREAT_MODEL.md)
 - [Evaluation & Benchmark Framework](docs/EVALUATION.md)
+- [2-Minute Showcase Demo](docs/DEMO.md)
 - [Development Guide](docs/DEVELOPMENT.md)
 - [Changelog](CHANGELOG.md)
 
 ---
 
-## 11. Roadmap
+## 10. Roadmap
 
-- [x] Unified Run & Event Trace Model (Spans, JSONL)
-- [x] ToolShield Security & Policy Engine (Allow/Deny/Review)
-- [x] Output Sanitizer (Credentials, Tokens, PII)
-- [x] Execution Reliability & Idempotency Layer
-- [x] Checkpoint & Step Recovery Model
-- [x] Deterministic Evaluation Runner & Red Team Suite
-- [x] Normalized Cost & Latency Telemetry
-- [x] Model Routing Abstraction
-- [x] GitHub Actions CI/CD Security Gate
-- [x] VS Code Extension & Web Dashboard Upgrade
-- [ ] Multi-tenant Sandboxed Container Gateway (gVisor/Wasm)
-- [ ] Enterprise Webhook Alerting (Slack/Teams/PagerDuty)
+- [x] Unified Event & Trace Spans (JSONL)
+- [x] ToolShield Policy Engine & Argument Validator
+- [x] Zero-Loss Output Sanitizer
+- [x] MCP-Compatible Tool Security Gateway
+- [x] Execution Manager & Idempotency Layer
+- [x] Step Checkpoint & Recovery System
+- [x] Deterministic Evaluation Runner & Red Team Corpus
+- [x] Cost & Latency Telemetry Accounting
+- [x] Rule-Based Model Routing Abstraction
+- [x] GitHub Actions CI/CD Quality Gate
+- [x] VS Code Extension & Control Plane Web Dashboard
+- [ ] Remote MCP JSON-RPC Server / Client Transports
+- [ ] Sandboxed MicroVM / Container Isolation Layer (gVisor/Wasm)
 
 ---
 
-## 12. License
+## 11. License
 
 MIT License. See [LICENSE](LICENSE) for details.
