@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
-from datetime import datetime
+from pydantic import BaseModel, Field
 
 
 class Verdict(str, Enum):
@@ -58,13 +57,18 @@ class GitChangeSummary(BaseModel):
 
 class AIReviewResult(BaseModel):
     summary: str
-    findings: List[Finding]
+    findings: List[Finding] = []
     status: CheckStatus = CheckStatus.PASSED
     provider: str = "gemini"
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    duration_ms: Optional[float] = None
+    estimated_cost_usd: Optional[float] = None
 
 
 class VerificationReport(BaseModel):
-    version: str = "1.0"
+    version: str = "2.0"
+    run_id: str = ""
     verdict: Verdict
     repository: str = ""
     branch: str = ""
@@ -75,6 +79,11 @@ class VerificationReport(BaseModel):
     checks: List[CheckResult] = []
     confirmed_findings: List[Finding] = []
     unconfirmed_findings: List[Finding] = []
-    ai_review: Dict[str, Any] = {}
+    ai_review: Dict[str, Any] = Field(default_factory=dict)
     ai_provider: str = ""
-    metadata: Dict[str, Any] = {}
+    tool_decisions: List[Dict[str, Any]] = Field(default_factory=list)
+    tool_executions: List[Dict[str, Any]] = Field(default_factory=list)
+    eval_report: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None
+    events: List[Dict[str, Any]] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)

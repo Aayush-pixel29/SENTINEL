@@ -1,0 +1,56 @@
+name: Sentinel-X Verification & Security Gate
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  verify:
+    name: SENTINEL-X AI Verification & Policy Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest ruff mypy
+
+      - name: Run Pytest Test Suite
+        run: |
+          python -m pytest
+
+      - name: Run Red Team Security Benchmark
+        run: |
+          python -m sentinel.cli redteam
+
+      - name: Run Deterministic Evaluation Suite
+        run: |
+          python -m sentinel.cli eval
+
+      - name: Run Sentinel-X Verification
+        run: |
+          python -m sentinel.cli verify --eval
+
+      - name: Upload Verification Report Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sentinel-verification-report
+          path: |
+            .sentinel/report.json
+            .sentinel/report.md
+            .sentinel/events/

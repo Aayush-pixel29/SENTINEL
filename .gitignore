@@ -6,3 +6,7 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+.sentinel/events/
+.sentinel/checkpoints/
+.sentinel/report.json
+.sentinel/report.md
