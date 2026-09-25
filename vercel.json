@@ -1,19 +1,4 @@
 {
-  "version": 2,
-  "public": true,
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/web-demo/index.html"
-    },
-    {
-      "source": "/data.js",
-      "destination": "/web-demo/data.js"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/web-demo/$1"
-    }
-  ]
+  "outputDirectory": "web-demo",
+  "cleanUrls": true
 }
