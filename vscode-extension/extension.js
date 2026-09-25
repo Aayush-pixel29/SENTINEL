@@ -36,7 +36,7 @@ function runCommand(command, args, cwd) {
 async function verify() {
   const root = workspaceRoot();
   if (!root) {
-    vscode.window.showErrorMessage("Sentinel: Open a Git repository/workspace first.");
+    vscode.window.showErrorMessage("Sentinel-X: Open a Git repository/workspace first.");
     return;
   }
 
@@ -47,22 +47,22 @@ async function verify() {
   vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "Sentinel: verifying changes...",
+      title: "Sentinel-X: verifying changes and evaluating safety boundaries...",
       cancellable: false
     },
     async () => {
       try {
-        let result = await runCommand(command, [...parts, "verify"], root);
+        let result = await runCommand(command, [...parts, "verify", "--eval"], root);
 
-        // Friendly fallback for developers using the source checkout.
+        // Friendly fallback for developers using source checkout
         if (result.code !== 0 && (result.stderr.includes("not recognized") ||
             result.stderr.includes("ENOENT") || result.stderr.includes("not found"))) {
-          result = await runCommand("python", ["-m", "sentinel.cli", "verify"], root);
+          result = await runCommand("python", ["-m", "sentinel.cli", "verify", "--eval"], root);
         }
 
         if (result.code !== 0 && !fs.existsSync(reportPath())) {
           vscode.window.showErrorMessage(
-            "Sentinel could not run. Install the Sentinel engine with Python, then try again.",
+            "Sentinel-X engine could not run. Check Python dependencies, then try again.",
             "Setup"
           ).then(choice => {
             if (choice === "Setup") vscode.commands.executeCommand("sentinel.setup");
@@ -74,21 +74,21 @@ async function verify() {
           loadReport();
           const verdict = currentReport?.verdict || "UNKNOWN";
           const message =
-            verdict === "VERIFIED" ? "Sentinel: VERIFIED ✓" :
-            verdict === "BLOCKED" ? "Sentinel: BLOCKED" :
-            verdict === "REVIEW" ? "Sentinel: REVIEW" :
-            "Sentinel: INCOMPLETE";
+            verdict === "VERIFIED" ? "Sentinel-X: VERIFIED ✓" :
+            verdict === "BLOCKED" ? "Sentinel-X: BLOCKED ✗" :
+            verdict === "REVIEW" ? "Sentinel-X: REVIEW ⚠" :
+            "Sentinel-X: INCOMPLETE";
           if (verdict === "VERIFIED") {
             vscode.window.showInformationMessage(message);
           } else {
             vscode.window.showWarningMessage(message);
           }
         } else {
-          vscode.window.showErrorMessage("Sentinel finished without producing .sentinel/report.json.");
+          vscode.window.showErrorMessage("Sentinel-X finished without producing .sentinel/report.json.");
         }
       } catch (err) {
         vscode.window.showErrorMessage(
-          "Sentinel CLI was not found. Install it with: python -m pip install -e <path-to-SENTINEL>"
+          "Sentinel-X CLI was not found. Install it with: python -m pip install -e ."
         );
       }
     }
@@ -105,7 +105,7 @@ function loadReport() {
     viewProvider?.refresh();
     return currentReport;
   } catch {
-    vscode.window.showErrorMessage("Sentinel: report.json is invalid.");
+    vscode.window.showErrorMessage("Sentinel-X: report.json is invalid.");
     return null;
   }
 }
@@ -136,10 +136,10 @@ function updateDiagnostics() {
     const prefix = finding.classification === "CONFIRMED" ? "CONFIRMED" : "UNCONFIRMED (AI)";
     const diagnostic = new vscode.Diagnostic(
       range,
-      `Sentinel ${prefix}: ${finding.title}. ${finding.description || ""}`,
+      `Sentinel-X ${prefix}: ${finding.title}. ${finding.description || ""}`,
       severity
     );
-    diagnostic.source = "Sentinel";
+    diagnostic.source = "Sentinel-X";
     const uriStr = uri.toString();
     if (!diagnostics.has(uriStr)) {
       diagnostics.set(uriStr, { uri, diags: [] });
@@ -158,7 +158,7 @@ function updateDiagnostics() {
 function explain() {
   const report = currentReport || loadReport();
   if (!report) {
-    vscode.window.showInformationMessage("Sentinel: Run Verify Changes first.");
+    vscode.window.showInformationMessage("Sentinel-X: Run Verify Changes first.");
     return;
   }
 
@@ -167,17 +167,18 @@ function explain() {
   const failed = (report.checks || []).filter(c => c.status === "FAILED").map(c => c.name);
 
   const lines = [];
-  lines.push(`Sentinel verdict: ${report.verdict}`);
+  lines.push(`Sentinel-X Verdict: ${report.verdict}`);
+  lines.push(`Run ID: ${report.run_id || "run_local"}`);
   lines.push("");
   if (confirmed.length) {
-    lines.push("CONFIRMED EVIDENCE:");
+    lines.push("CONFIRMED EVIDENCE (Deterministic):");
     for (const f of confirmed) {
       lines.push(`• ${f.source}: ${f.title}${f.file ? ` (${f.file}:${f.line || "?"})` : ""}`);
     }
   }
   if (unconfirmed.length) {
     lines.push("");
-    lines.push("UNCONFIRMED AI CONCERNS:");
+    lines.push("UNCONFIRMED AI CRITIC FINDINGS:");
     for (const f of unconfirmed) {
       lines.push(`• ${f.title}${f.file ? ` (${f.file}:${f.line || "?"})` : ""}`);
     }
@@ -189,8 +190,8 @@ function explain() {
   lines.push("");
   lines.push(
     report.verdict === "VERIFIED"
-      ? "Recommended action: human review is still recommended before merging."
-      : "Recommended action: inspect the evidence, fix confirmed issues, and verify again."
+      ? "Recommended action: all checks passed. Ready for human decision."
+      : "Recommended action: inspect the evidence, resolve confirmed issues, and verify again."
   );
 
   vscode.window.showInformationMessage(lines.join("\n"), { modal: true });
@@ -199,13 +200,13 @@ function explain() {
 function setup() {
   const root = workspaceRoot();
   if (!root) {
-    vscode.window.showErrorMessage("Open the project/repository you want Sentinel to verify.");
+    vscode.window.showErrorMessage("Open the workspace you want Sentinel-X to verify.");
     return;
   }
 
-  const terminal = vscode.window.createTerminal({ name: "Sentinel Setup", cwd: root });
+  const terminal = vscode.window.createTerminal({ name: "Sentinel-X Setup", cwd: root });
   terminal.show();
-  
+
   const isSentinelRepo = fs.existsSync(path.join(root, "sentinel", "cli.py")) && fs.existsSync(path.join(root, "pyproject.toml"));
   const installCmd = isSentinelRepo 
     ? 'python -m pip install -e .' 
@@ -213,7 +214,7 @@ function setup() {
     
   terminal.sendText(installCmd);
   vscode.window.showInformationMessage(
-    "Sentinel setup command opened in the terminal. After installation, run Sentinel: Verify Changes."
+    "Sentinel-X setup command opened in the terminal. After installation, run Sentinel: Verify Changes."
   );
 }
 
@@ -231,6 +232,7 @@ class SentinelViewProvider {
       if (message.command === "verify") vscode.commands.executeCommand("sentinel.verify");
       if (message.command === "explain") vscode.commands.executeCommand("sentinel.explain");
       if (message.command === "setup") vscode.commands.executeCommand("sentinel.setup");
+      if (message.command === "openReport") vscode.commands.executeCommand("sentinel.openReport");
       if (message.command === "open") await openFinding(message.file, message.line);
     });
     this.refresh();
@@ -253,11 +255,11 @@ class SentinelViewProvider {
       <style>
         body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:12px}
         button{width:100%;padding:8px;margin:5px 0;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:0;border-radius:4px;cursor:pointer;}
-        .muted{opacity:.75;line-height:1.5;margin-bottom:12px}
-        h2{margin:0 0 8px}
+        .muted{opacity:.75;line-height:1.5;margin-bottom:12px;font-size:12px}
+        h2{margin:0 0 8px;font-size:16px}
       </style>
-      <h2>🛡 Sentinel</h2>
-      <p class="muted">Verify the Git changes in the current workspace. Sentinel runs the existing verification engine and shows evidence here.</p>
+      <h2>🛡 Sentinel-X Control Plane</h2>
+      <p class="muted">AI Agent Reliability, Security & Verification Control Plane. Verify Git changes, evaluate safety boundaries, and inspect evidence.</p>
       <button onclick="send('verify')">Verify Changes</button>
       <button onclick="send('setup')">Setup Engine</button>
       <script>
@@ -286,35 +288,44 @@ class SentinelViewProvider {
       </div>`;
     }).join("");
 
+    const metricsHtml = r.metrics ? `
+      <div class="section">Telemetry</div>
+      <div class="row"><span>LLM Latency</span><span>${Math.round(r.metrics.latency_ms || 0)}ms</span></div>
+      <div class="row"><span>Tokens</span><span>${r.metrics.total_tokens || 0}</span></div>
+      <div class="row"><span>Est. Cost</span><span>$${Number(r.metrics.estimated_cost_usd || 0).toFixed(5)}</span></div>
+    ` : "";
+
     return `<!doctype html><html><body>
     <style>
       body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:10px}
-      h2{margin:0 0 4px}.sub{opacity:.7;font-size:11px;margin-bottom:12px}
-      .verdict{padding:12px;border-radius:6px;margin:10px 0;font-weight:700;font-size:18px}
+      h2{margin:0 0 4px;font-size:16px}.sub{opacity:.7;font-size:11px;margin-bottom:12px;font-family:monospace}
+      .verdict{padding:10px;border-radius:6px;margin:8px 0;font-weight:700;font-size:16px;text-align:center}
       .ok{color:var(--vscode-testing-iconPassed);background:color-mix(in srgb,var(--vscode-testing-iconPassed) 12%,transparent)}
       .bad{color:var(--vscode-testing-iconFailed);background:color-mix(in srgb,var(--vscode-testing-iconFailed) 12%,transparent)}
       .warn{color:var(--vscode-editorWarning-foreground);background:color-mix(in srgb,var(--vscode-editorWarning-foreground) 10%,transparent)}
       .muted{opacity:.7}
-      .section{margin-top:16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-      .row{display:flex;justify-content:space-between;padding:4px 0;font-size:11px}
+      .section{margin-top:14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:2px}
+      .row{display:flex;justify-content:space-between;padding:3px 0;font-size:11px}
       .finding{padding:8px;margin:6px 0;border-radius:5px;cursor:pointer;border:1px solid transparent;background:var(--vscode-editor-background);}
       .finding.bad{border-left:4px solid var(--vscode-testing-iconFailed);}
       .finding.warn{border-left:4px solid var(--vscode-editorWarning-foreground);}
       .finding:hover{background:var(--vscode-list-hoverBackground);}
-      button{width:100%;padding:7px;margin-top:6px;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:0;border-radius:4px;cursor:pointer}
+      button{width:100%;padding:6px;margin-top:5px;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:0;border-radius:4px;cursor:pointer;font-size:12px}
       button:hover{opacity:0.9}
       small{opacity:.75}
     </style>
-    <h2>🛡 Sentinel</h2>
-    <div class="sub">${esc(r.repository || "")} · ${esc(r.branch || "")}</div>
+    <h2>🛡 Sentinel-X</h2>
+    <div class="sub">${esc(r.run_id || "run_local")} · ${esc(r.branch || "")}</div>
     <div class="verdict ${cls}">${esc(verdict)}</div>
     <div class="section">Verification checks</div>
     ${checks || '<div class="muted">No checks recorded.</div>'}
     <div class="section">Findings</div>
     ${findings || '<div class="muted" style="margin-top:8px">No findings.</div>'}
-    <div style="margin-top:20px;">
+    ${metricsHtml}
+    <div style="margin-top:16px;">
       <button onclick="send('verify')">Verify Again</button>
       <button onclick="send('explain')">Explain Verdict</button>
+      <button onclick="send('openReport')">Open Full Report</button>
     </div>
     <script>
       const vscode = acquireVsCodeApi();
@@ -352,7 +363,7 @@ function activate(context) {
     vscode.commands.registerCommand("sentinel.openReport", async () => {
       const file = reportPath();
       if (!file || !fs.existsSync(file)) {
-        vscode.window.showInformationMessage("Sentinel: No report found. Run Verify Changes first.");
+        vscode.window.showInformationMessage("Sentinel-X: No report found. Run Verify Changes first.");
         return;
       }
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
